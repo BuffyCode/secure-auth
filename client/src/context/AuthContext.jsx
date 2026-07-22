@@ -4,7 +4,7 @@ import axios from 'axios';
 const AuthContext = createContext(null);
 
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: "https://secure-auth-xgt4.onrender.com/api",
 });
 
 export const AuthProvider = ({ children }) => {
