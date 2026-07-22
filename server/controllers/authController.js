@@ -1,8 +1,9 @@
 const User = require("../models/User");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const speakeasy = require("speakeasy");
+const qrcode = require("qrcode");
 const AppError = require("../utils/appError");
-const { sendOtpEmail } = require("../utils/emailService");
 
 const createToken = (user) => {
   return jwt.sign(
@@ -17,8 +18,20 @@ const createToken = (user) => {
   );
 };
 
-const generateOtp = () => {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+const generateMfaSecret = (email) => {
+  return speakeasy.generateSecret({
+    name: `Secure Auth (${email})`,
+    length: 20,
+  });
+};
+
+const verifyMfaToken = (secret, token) => {
+  return speakeasy.totp.verify({
+    secret,
+    encoding: "base32",
+    token,
+    window: 1,
+  });
 };
 
 const sanitizeUser = (user) => ({
@@ -26,6 +39,7 @@ const sanitizeUser = (user) => ({
   name: user.name,
   email: user.email,
   role: user.role,
+  mfaEnabled: user.mfaEnabled || false,
 });
 
 const registerUser = async (req, res, next) => {
@@ -69,7 +83,7 @@ const registerUser = async (req, res, next) => {
 
 const loginUser = async (req, res, next) => {
   try {
-    const { email, password, otp } = req.body;
+    const { email, password, mfaToken } = req.body;
 
     if (!email) {
       return next(new AppError(400, "Email is required"));
@@ -81,29 +95,6 @@ const loginUser = async (req, res, next) => {
       return next(new AppError(401, "Invalid email or password"));
     }
 
-    if (otp) {
-      if (!user.otp || !user.otpExpiresAt || new Date() > user.otpExpiresAt) {
-        return next(new AppError(401, "OTP expired or invalid"));
-      }
-
-      if (user.otp !== otp) {
-        return next(new AppError(401, "Invalid OTP"));
-      }
-
-      user.otp = null;
-      user.otpExpiresAt = null;
-      await user.save();
-
-      const token = createToken(user);
-
-      return res.status(200).json({
-        success: true,
-        message: "OTP verified successfully",
-        token,
-        user: sanitizeUser(user),
-      });
-    }
-
     if (!password) {
       return next(new AppError(400, "Password is required"));
     }
@@ -112,6 +103,22 @@ const loginUser = async (req, res, next) => {
 
     if (!isMatch) {
       return next(new AppError(401, "Invalid email or password"));
+    }
+
+    if (user.mfaEnabled) {
+      if (!mfaToken) {
+        return res.status(401).json({
+          success: false,
+          mfaRequired: true,
+          message: "MFA token required",
+        });
+      }
+
+      const isVerified = verifyMfaToken(user.mfaSecret, mfaToken);
+
+      if (!isVerified) {
+        return next(new AppError(401, "Invalid MFA token"));
+      }
     }
 
     const token = createToken(user);
@@ -127,34 +134,62 @@ const loginUser = async (req, res, next) => {
   }
 };
 
-const requestOtp = async (req, res, next) => {
+const setupMfa = async (req, res, next) => {
   try {
-    const { email } = req.body;
-
-    if (!email) {
-      return next(new AppError(400, "Email is required"));
-    }
-
-    const user = await User.findOne({ email });
+    const user = await User.findById(req.user.id);
 
     if (!user) {
-      return next(new AppError(404, "User not found"));
+      return next(new AppError(401, "User not found"));
     }
 
-    const otp = generateOtp();
-    user.otp = otp;
-    user.otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    if (user.mfaEnabled) {
+      return next(new AppError(400, "MFA is already enabled"));
+    }
+
+    const secret = generateMfaSecret(user.email);
+    user.mfaTempSecret = secret.base32;
     await user.save();
 
-    try {
-      await sendOtpEmail(email, otp);
-    } catch (error) {
-      console.error("OTP email delivery failed", error.message);
-    }
+    const qrCodeDataURL = await qrcode.toDataURL(secret.otpauth_url);
 
     res.status(200).json({
       success: true,
-      message: "OTP sent to your email",
+      qrCodeDataURL,
+      message: "Scan this QR code with your authenticator app.",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const verifyMfa = async (req, res, next) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return next(new AppError(400, "MFA token is required"));
+    }
+
+    const user = await User.findById(req.user.id);
+
+    if (!user || !user.mfaTempSecret) {
+      return next(new AppError(400, "MFA setup is not in progress"));
+    }
+
+    const isVerified = verifyMfaToken(user.mfaTempSecret, token);
+
+    if (!isVerified) {
+      return next(new AppError(401, "Invalid MFA token"));
+    }
+
+    user.mfaSecret = user.mfaTempSecret;
+    user.mfaTempSecret = null;
+    user.mfaEnabled = true;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "MFA enabled successfully",
     });
   } catch (error) {
     next(error);
@@ -186,7 +221,8 @@ const getAdminDashboard = async (req, res, next) => {
 module.exports = {
   registerUser,
   loginUser,
-  requestOtp,
+  setupMfa,
+  verifyMfa,
   getProfile,
   getAdminDashboard,
 };

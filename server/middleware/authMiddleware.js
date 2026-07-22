@@ -24,6 +24,7 @@ const protect = async (req, res, next) => {
       name: user.name,
       email: user.email,
       role: user.role,
+      mfaEnabled: user.mfaEnabled || false,
     };
 
     next();

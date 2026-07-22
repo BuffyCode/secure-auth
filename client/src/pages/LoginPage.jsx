@@ -5,11 +5,12 @@ import { useAuth } from '../context/AuthContext';
 const LoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [otp, setOtp] = useState('');
+  const [mfaToken, setMfaToken] = useState('');
+  const [mfaRequired, setMfaRequired] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const { login, requestOtp } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (event) => {
@@ -18,22 +19,25 @@ const LoginPage = () => {
     setMessage('');
 
     try {
-      await login(email, password, otp || null);
+      const response = await login(email, password, mfaRequired ? mfaToken : null);
+
+      if (response.mfaRequired) {
+        setMfaRequired(true);
+        setMessage('Enter the code from your authenticator app.');
+        return;
+      }
+
       navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed');
-    }
-  };
+      const responseData = err.response?.data;
 
-  const handleSendOtp = async () => {
-    setError('');
-    setMessage('');
+      if (responseData?.mfaRequired) {
+        setMfaRequired(true);
+        setMessage('Enter the code from your authenticator app.');
+        return;
+      }
 
-    try {
-      await requestOtp(email);
-      setMessage('OTP sent to your email.');
-    } catch (err) {
-      setError(err.response?.data?.message || 'Unable to send OTP');
+      setError(responseData?.message || 'Login failed');
     }
   };
 
@@ -41,18 +45,30 @@ const LoginPage = () => {
     <div className="card">
       <h2>Login</h2>
       <form onSubmit={handleSubmit} className="auth-form">
-        <p className="helper-text">Use password login or request an OTP code for email-based sign in.</p>
+        <p className="helper-text">
+          Use password login. If MFA is enabled, provide the code from your authenticator app.
+        </p>
         <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email" />
         <div className="password-field">
-          <input type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Password" />
+          <input
+            type={showPassword ? 'text' : 'password'}
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="Password"
+          />
           <button type="button" className="ghost-btn" onClick={() => setShowPassword((value) => !value)}>
             {showPassword ? 'Hide' : 'Show'}
           </button>
         </div>
-        <div className="otp-row">
-          <input value={otp} onChange={(event) => setOtp(event.target.value)} placeholder="OTP (optional)" />
-          <button type="button" className="ghost-btn" onClick={handleSendOtp}>Send OTP</button>
-        </div>
+        {mfaRequired && (
+          <div className="mfa-row">
+            <input
+              value={mfaToken}
+              onChange={(event) => setMfaToken(event.target.value)}
+              placeholder="Authenticator code"
+            />
+          </div>
+        )}
         {message && <p className="success-text">{message}</p>}
         {error && <p className="error-text">{error}</p>}
         <button type="submit">Login</button>

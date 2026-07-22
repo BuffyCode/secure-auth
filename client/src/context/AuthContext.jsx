@@ -19,8 +19,8 @@ export const AuthProvider = ({ children }) => {
     }
   }, [token]);
 
-  const login = async (email, password, otp = null) => {
-    const response = await api.post('/auth/login', { email, password, otp });
+  const login = async (email, password, mfaToken = null) => {
+    const response = await api.post('/auth/login', { email, password, mfaToken });
     const { token: authToken, user: authUser } = response.data;
     localStorage.setItem('token', authToken);
     setToken(authToken);
@@ -28,8 +28,12 @@ export const AuthProvider = ({ children }) => {
     return response.data;
   };
 
-  const requestOtp = async (email) => {
-    return api.post('/auth/request-otp', { email });
+  const setupMfa = async () => {
+    return api.post('/auth/mfa/setup');
+  };
+
+  const verifyMfa = async (token) => {
+    return api.post('/auth/mfa/verify', { token });
   };
 
   const register = async (name, email, password, role = 'user') => {
@@ -59,7 +63,7 @@ export const AuthProvider = ({ children }) => {
     return response.data;
   };
 
-  const value = useMemo(() => ({ user, token, login, register, logout, getProfile, getAdminDashboard, requestOtp }), [user, token]);
+  const value = useMemo(() => ({ user, token, login, register, logout, getProfile, getAdminDashboard, setupMfa, verifyMfa }), [user, token]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

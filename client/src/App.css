@@ -78,14 +78,35 @@
 }
 
 .password-field,
-.otp-row {
+.mfa-row {
   display: flex;
   gap: 0.6rem;
 }
 
 .password-field input,
-.otp-row input {
+.mfa-row input {
   flex: 1;
+}
+
+.mfa-section {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  border: 1px solid #cfd8e3;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.mfa-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.mfa-qr {
+  max-width: 280px;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
 }
 
 button {

@@ -22,13 +22,18 @@ const userSchema = new mongoose.Schema(
       minlength: 6,
     },
 
-    otp: {
+    mfaEnabled: {
+      type: Boolean,
+      default: false,
+    },
+
+    mfaSecret: {
       type: String,
       default: null,
     },
 
-    otpExpiresAt: {
-      type: Date,
+    mfaTempSecret: {
+      type: String,
       default: null,
     },
 
