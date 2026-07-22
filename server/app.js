@@ -10,7 +10,7 @@ const userRoutes = require("./routes/userRoutes");
 const errorMiddleware = require("./middleware/errorMiddleware");
 
 app.use(helmet());
-app.use(cors({ origin: true, credentials: true }));
+app.use(cors({ origin: "https://secure-auth-zeta.vercel.app/", credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
 
